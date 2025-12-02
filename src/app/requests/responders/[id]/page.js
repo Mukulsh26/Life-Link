@@ -47,6 +47,22 @@ export default function RespondersPage() {
     }
   };
 
+  useEffect(() => {
+  const channel = pusherClient.subscribe("blood-requests");
+
+  channel.bind("donor-responded", (data) => {
+    if (data.requestId === id) {
+      setResponders((prev) => [...prev, data.donor]);
+    }
+  });
+
+  return () => {
+    channel.unbind_all();
+    channel.unsubscribe();
+  };
+}, []);
+
+
   return (
     <main className="min-h-screen px-6 py-10">
       <h1 className="text-3xl font-bold text-red-400 mb-6">

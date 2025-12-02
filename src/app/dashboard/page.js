@@ -2,20 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import Navbar from "../components/Navbar";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import RequestCard from "../components/RequestCard";
+
 import { toast } from "sonner";
-import { requestFcmToken } from "../../lib/firebase"
+import { requestFcmToken } from "../../lib/firebase";
 import { pusherClient } from "../../lib/pusher-client";
 
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
 
-  const [tab, setTab] = useState("requests"); // Donor tabs
-  const [hTab, setHTab] = useState("create"); // Hospital tabs
+  const [tab, setTab] = useState("requests");
+  const [hTab, setHTab] = useState("create");
 
   const [requests, setRequests] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
@@ -28,11 +30,14 @@ export default function Dashboard() {
     notes: "",
   });
 
+  // ---------------------------------------------------------
+  // 1️⃣ LOAD USER + INITIAL REQUESTS
+  // ---------------------------------------------------------
   useEffect(() => {
     const token = localStorage.getItem("lifelink_token");
     const u = JSON.parse(localStorage.getItem("lifelink_user") || "{}");
 
-    if (!token || !u) {
+    if (!token || !u || !u.role) {
       router.push("/login");
       return;
     }
@@ -41,104 +46,116 @@ export default function Dashboard() {
 
     if (u.role === "donor") loadDonorRequests(u, token);
     if (u.role === "hospital") loadHospitalRequests(token);
+
   }, []);
 
-  // existing useEffect where you load user is fine; now add:
+  // ---------------------------------------------------------
+  // 2️⃣ INITIAL FCM TOKEN REGISTRATION
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
 
-useEffect(() => {
-  if (!user) return;
+    const setupFcm = async () => {
+      try {
+        const token = await requestFcmToken();
+        if (!token) return;
 
-  const setupFcm = async () => {
-    try {
-      const token = await requestFcmToken();
-      if (!token) return;
+        await fetch("/api/user/device-token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("lifelink_token")}`,
+          },
+          body: JSON.stringify({ deviceToken: token }),
+        });
 
-      const jwt = localStorage.getItem("lifelink_token");
+        console.log("Device token saved");
+      } catch (err) {
+        console.error(err);
+      }
+    };
 
-      await fetch("/api/user/device-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({ deviceToken: token }),
-      });
+    setupFcm();
+  }, [user]);
 
-      console.log("Device token saved to backend");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to register for notifications");
-    }
-  };
+  // ---------------------------------------------------------
+  // 3️⃣ REAL-TIME (DONOR)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!user || user.role !== "donor") return;
 
-  setupFcm();
-}, [user]);
+    const channel = pusherClient.subscribe("blood-requests");
 
-useEffect(() => {
-  if (!user || user.role !== "donor") return;
+    // New matching request
+    channel.bind("new-request", (data) => {
+      if (
+        data.city === user.city.toLowerCase() &&
+        data.bloodGroup === user.bloodGroup.toUpperCase()
+      ) {
+        loadDonorRequests(user, localStorage.getItem("lifelink_token"));
+      }
+    });
 
-  const channel = pusherClient.subscribe("blood-requests");
+    // Deleted request
+    channel.bind("delete-request", (data) => {
+      setRequests((prev) => prev.filter((r) => r._id !== data.requestId));
+    });
 
-  // NEW REQUEST
-  channel.bind("new-request", (data) => {
-    if (
-      data.city === user.city.toLowerCase() &&
-      data.bloodGroup === user.bloodGroup.toUpperCase()
-    ) {
-      loadDonorRequests(user, localStorage.getItem("lifelink_token"));
-    }
-  });
+    // Status changed
+    channel.bind("status-change", (data) => {
+      setRequests((prev) =>
+        prev.map((r) =>
+          r._id === data.requestId ? { ...r, status: data.status } : r
+        )
+      );
+    });
 
-  // DELETE REQUEST
-  channel.bind("delete-request", (data) => {
-    setRequests((prev) => prev.filter((r) => r._id !== data.requestId));
-  });
+    return () => {
+      pusherClient.unsubscribe("blood-requests");
+    };
+  }, [user]);
 
-  // STATUS CHANGE (INACTIVE)
-  channel.bind("status-change", (data) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r._id === data.requestId
-          ? { ...r, status: data.status }
-          : r
-      )
-    );
-  });
+  // ---------------------------------------------------------
+  // 4️⃣ REAL-TIME (HOSPITAL - DONOR RESPONDED)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!user || user.role !== "hospital") return;
 
-  return () => {
-    pusherClient.unsubscribe("blood-requests");
-  };
-}, [user]);
+    const channel = pusherClient.subscribe("blood-requests");
 
+    // Donor responded
+    channel.bind("donor-responded", (data) => {
+      setMyRequests((prev) =>
+        prev.map((r) =>
+          r._id === data.requestId
+            ? { ...r, responders: [...(r.responders || []), data.donor] }
+            : r
+        )
+      );
+    });
 
-useEffect(() => {
-  if (!user || user.role !== "hospital") return;
+    // Deleted request
+    channel.bind("delete-request", (data) => {
+      setMyRequests((prev) => prev.filter((r) => r._id !== data.requestId));
+    });
 
-  const channel = pusherClient.subscribe("blood-requests");
+    // Status changed
+    channel.bind("status-change", (data) => {
+      setMyRequests((prev) =>
+        prev.map((r) =>
+          r._id === data.requestId ? { ...r, status: data.status } : r
+        )
+      );
+    });
 
-  // DELETE
-  channel.bind("delete-request", (data) => {
-    setMyRequests((prev) => prev.filter((r) => r._id !== data.requestId));
-  });
+    return () => {
+      pusherClient.unsubscribe("blood-requests");
+    };
+  }, [user]);
 
-  // STATUS CHANGE
-  channel.bind("status-change", (data) => {
-    setMyRequests((prev) =>
-      prev.map((r) =>
-        r._id === data.requestId
-          ? { ...r, status: data.status }
-          : r
-      )
-    );
-  });
-
-  return () => {
-    pusherClient.unsubscribe("blood-requests");
-  };
-}, [user]);
-
-
-
+  // ---------------------------------------------------------
+  // LOAD REQUESTS
+  // ---------------------------------------------------------
   const loadDonorRequests = async (u, token) => {
     const res = await fetch(
       `/api/requests/list?role=donor&city=${encodeURIComponent(
@@ -148,16 +165,15 @@ useEffect(() => {
     );
 
     const data = await res.json();
+
     if (res.ok) {
-      // Add helper flag to mark if current donor already responded
-      const withFlags = data.requests.map((r) => ({
+      const formatted = data.requests.map((r) => ({
         ...r,
         responded: r.responders?.some(
           (p) => p.donor === u._id || p.donor?._id === u._id
         ),
       }));
-
-      setRequests(withFlags);
+      setRequests(formatted);
     }
   };
 
@@ -170,47 +186,50 @@ useEffect(() => {
     if (res.ok) setMyRequests(data.requests);
   };
 
+  // ---------------------------------------------------------
+  // CRUD ACTIONS
+  // ---------------------------------------------------------
   const createRequest = async (e) => {
-  e.preventDefault();
-  const token = localStorage.getItem("lifelink_token");
+    e.preventDefault();
 
-  const payload = {
-    ...newReq,
-    city: newReq.city || user.city,
+    const token = localStorage.getItem("lifelink_token");
+
+    const payload = {
+      ...newReq,
+      city: newReq.city || user.city,
+    };
+
+    const res = await fetch("/api/requests/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast.error(data.error);
+      return;
+    }
+
+    toast.success("Request created");
+    loadHospitalRequests(token);
+
+    setNewReq({
+      bloodGroup: "",
+      quantity: 1,
+      urgency: "medium",
+      city: "",
+      notes: "",
+    });
   };
 
-  const res = await fetch("/api/requests/create", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    toast.error(data.error || "Failed to create request");
-    return;
-  }
-
-  toast.success("Request created successfully!");
-  loadHospitalRequests(token);
-  setNewReq({
-    bloodGroup: "",
-    quantity: 1,
-    urgency: "medium",
-    city: "",
-    notes: "",
-  });
-};
-
-
   const respond = async (id) => {
-  const token = localStorage.getItem("lifelink_token");
+    const token = localStorage.getItem("lifelink_token");
 
-  try {
     const res = await fetch("/api/requests/respond", {
       method: "POST",
       headers: {
@@ -222,24 +241,15 @@ useEffect(() => {
 
     const data = await res.json();
 
-    if (!res.ok) {
-      toast.error(data.error || "Failed to submit response");
-      return;
-    }
+    if (!res.ok) return toast.error(data.error);
 
-    toast.success("Response submitted!");
-    loadDonorRequests(user, token); // refresh donor requests
-  } catch (err) {
-    console.error(err);
-    toast.error("Something went wrong");
-  }
-};
-
+    toast.success("Response submitted");
+    loadDonorRequests(user, token);
+  };
 
   const deleteRequest = async (id) => {
-  const token = localStorage.getItem("lifelink_token");
+    const token = localStorage.getItem("lifelink_token");
 
-  try {
     const res = await fetch("/api/requests/delete", {
       method: "POST",
       headers: {
@@ -251,24 +261,15 @@ useEffect(() => {
 
     const data = await res.json();
 
-    if (!res.ok) {
-      toast.error(data.error || "Failed to delete request");
-      return;
-    }
+    if (!res.ok) return toast.error(data.error);
 
-    toast.success("Request deleted successfully");
+    toast.success("Request deleted");
     loadHospitalRequests(token);
-  } catch (err) {
-    console.error(err);
-    toast.error("Something went wrong");
-  }
-};
-
+  };
 
   const changeStatus = async (id, status) => {
-  const token = localStorage.getItem("lifelink_token");
+    const token = localStorage.getItem("lifelink_token");
 
-  try {
     const res = await fetch("/api/requests/status", {
       method: "POST",
       headers: {
@@ -280,35 +281,32 @@ useEffect(() => {
 
     const data = await res.json();
 
-    if (!res.ok) {
-      toast.error(data.error || "Failed to update status");
-      return;
-    }
+    if (!res.ok) return toast.error(data.error);
 
-    toast.success(`Status updated to: ${status}`);
+    toast.success("Status updated");
     loadHospitalRequests(token);
-  } catch (err) {
-    console.error(err);
-    toast.error("Something went wrong");
-  }
-};
+  };
 
-
+  // ---------------------------------------------------------
   if (!user) return null;
 
+  // ---------------------------------------------------------
+  // DASHBOARD UI
+  // ---------------------------------------------------------
   return (
     <main className="min-h-screen">
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-4 pt-6">
-        {/* ⭐ WELCOME MESSAGE */}
         <h1 className="text-3xl font-bold mb-2">
           Welcome {user.role === "hospital" ? user.hospitalName : user.name}!
         </h1>
 
         <p className="text-slate-400 mb-6 capitalize">Role: {user.role}</p>
 
+        {/* --------------------------------------------------- */}
         {/* DONOR DASHBOARD */}
+        {/* --------------------------------------------------- */}
         {user.role === "donor" && (
           <>
             <div className="flex gap-3 mt-3">
@@ -338,10 +336,9 @@ useEffect(() => {
             {tab === "requests" && (
               <div className="grid gap-4 mt-6">
                 {requests.length === 0 && (
-                  <p className="text-slate-400">
-                    No matching requests found.
-                  </p>
+                  <p className="text-slate-400">No matching requests.</p>
                 )}
+
                 {requests.map((req) => (
                   <RequestCard
                     key={req._id}
@@ -354,47 +351,49 @@ useEffect(() => {
             )}
 
             {tab === "profile" && (
-  <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg mt-6">
+              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg mt-6">
 
-    <h2 className="text-xl font-bold text-red-400 mb-4">Your Profile</h2>
+                <h2 className="text-xl font-bold text-red-400 mb-4">
+                  Your Profile
+                </h2>
 
-    <div className="space-y-3 text-sm">
+                <div className="space-y-3 text-sm">
+                  {[ 
+                    ["Name", user.name],
+                    ["Email", user.email],
+                    ["City", user.city],
+                    ["Blood Group", user.bloodGroup],
+                    ["Contact Number", user.contactNumber],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="flex justify-between items-center border-b border-slate-800 pb-2"
+                    >
+                      <span className="text-slate-400">{label}</span>
+                      <span
+                        className={`font-semibold ${
+                          label === "Blood Group" || label === "Contact Number"
+                            ? "text-red-400"
+                            : "text-slate-200"
+                        }`}
+                      >
+                        {value}
+                      </span>
+                    </div>
+                  ))}
 
-      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span className="text-slate-400">Name</span>
-        <span className="font-semibold text-slate-200">{user.name}</span>
-      </div>
-
-      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span className="text-slate-400">Email</span>
-        <span className="font-semibold text-slate-200">{user.email}</span>
-      </div>
-
-      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span className="text-slate-400">City</span>
-        <span className="font-semibold text-slate-200">{user.city}</span>
-      </div>
-
-      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span className="text-slate-400">Blood Group</span>
-        <span className="font-semibold text-red-400">{user.bloodGroup}</span>
-      </div>
-
-      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span className="text-slate-400">Contact Number</span>
-        <span className="font-semibold text-red-400">{user.contactNumber}</span>
-      </div>
-
-      <div className="mt-4 bg-red-600/20 text-red-300 p-3 rounded-lg text-center text-xs font-medium">
-        Thank you for being a life-saving donor ❤️
-      </div>
-    </div>
-  </div>
-)}
+                  <div className="mt-4 bg-red-600/20 text-red-300 p-3 rounded-lg text-center text-xs font-medium">
+                    Thank you for being a life-saving donor ❤️
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
+        {/* --------------------------------------------------- */}
         {/* HOSPITAL DASHBOARD */}
+        {/* --------------------------------------------------- */}
         {user.role === "hospital" && (
           <>
             <div className="flex gap-3 mt-3">
@@ -423,7 +422,7 @@ useEffect(() => {
 
             {hTab === "create" && (
               <form onSubmit={createRequest} className="card mt-6 space-y-4">
-                {/* ⭐ BLOOD GROUP DROPDOWN */}
+
                 <div>
                   <label className="text-slate-300 text-sm">
                     Blood Group
@@ -436,14 +435,9 @@ useEffect(() => {
                     className="px-3 py-2 mt-1 bg-slate-900 border border-slate-700 rounded w-full"
                   >
                     <option value="">Select Blood Group</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
+                    {["A+","A-","B+","B-","O+","O-","AB+","AB-"].map(bg => (
+                      <option key={bg} value={bg}>{bg}</option>
+                    ))}
                   </select>
                 </div>
 

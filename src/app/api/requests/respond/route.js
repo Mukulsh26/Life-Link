@@ -3,6 +3,7 @@ import { connectDB } from "../../../../lib/db";
 import Request from "../../../../models/Request";
 import User from "../../../../models/User";
 import { getUserFromHeader } from "../../../../lib/auth";
+import { pusherServer } from "../../../../lib/pusher";
 
 export async function POST(req) {
   try {
@@ -29,29 +30,45 @@ export async function POST(req) {
     }
 
     // Check if already responded
-    const hasResponded = request.responders.some(
+    const already = request.responders.some(
       (r) => r.donor.toString() === donor._id.toString()
     );
 
-    if (hasResponded) {
+    if (already) {
       return NextResponse.json(
         { message: "Already responded" },
         { status: 200 }
       );
     }
 
-    // Add donor to responders list
+    // Add to responders
     request.responders.push({
       donor: donor._id,
-      respondedAt: new Date()
+      respondedAt: new Date(),
     });
 
     await request.save();
+
+    // ✅ SEND REAL-TIME UPDATE TO HOSPITAL USING PUSHER
+    await pusherServer.trigger("blood-requests", "donor-responded", {
+      requestId,
+      donorId: donor._id,
+
+      donor: {
+        _id: donor._id,
+        name: donor.name,
+        email: donor.email,
+        city: donor.city,
+        bloodGroup: donor.bloodGroup,
+        contactNumber: donor.contactNumber,
+      },
+    });
 
     return NextResponse.json(
       { message: "Response submitted!" },
       { status: 200 }
     );
+
   } catch (err) {
     console.error("Respond Error:", err);
     return NextResponse.json(
