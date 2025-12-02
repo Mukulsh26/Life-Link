@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { pusherClient } from "../../../../lib/pusher-client"
 
 export default function RespondersPage() {
   const { id } = useParams();
