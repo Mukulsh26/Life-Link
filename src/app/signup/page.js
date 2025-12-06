@@ -1,22 +1,25 @@
 "use client";
 
+import Navbar from "../components/Navbar";
+import Input from "../components/Input";
+import Button from "../components/Button";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Navbar from "../components/Navbar";
-import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import Button from "../components/Button";
-import Input from "../components/Input";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
-// Zod validation
-const LoginSchema = z.object({
+// --------------------------
+// ✅ ZOD VALIDATION SCHEMA
+// --------------------------
+const SignupSchema = z.object({
+  name: z.string().min(2, "Full name must be at least 2 characters"),
   email: z.string().email("Enter a valid email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -25,82 +28,84 @@ export default function LoginPage() {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm({
-    resolver: zodResolver(LoginSchema),
+    resolver: zodResolver(SignupSchema),
   });
 
-  // EMAIL LOGIN
+  // Show clean errors from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+
+    if (error === "already_exists") {
+      toast.error("Account already exists. Please login.");
+    }
+    if (error === "no_account") {
+      toast.error("No account found. Please create one.");
+    }
+
+    window.history.replaceState({}, "", "/signup");
+  }, []);
+
+  // --------------------------
+  // 🔥 GOOGLE SIGNUP
+  // --------------------------
+  const handleGoogleSignup = () => {
+    setGoogleLoading(true);
+    window.location.href = "/api/auth/google?mode=signup";
+  };
+
+  // --------------------------
+  // ✨ EMAIL SIGNUP HANDLER
+  // --------------------------
   const onSubmit = async (values) => {
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
 
       const data = await res.json();
+
       if (!res.ok) {
-        toast.error(data.error || "Invalid credentials");
+        toast.error(data.error);
         return;
       }
 
-      // Save token + user locally
+      // save token + user
       localStorage.setItem("lifelink_token", data.token);
       localStorage.setItem("lifelink_user", JSON.stringify(data.user));
 
-      toast.success("Logged in successfully");
-
-      // EXISTING USER → DASHBOARD
-      router.push("/dashboard");
+      router.push("/complete-profile");
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong");
     }
   };
 
-  // GOOGLE LOGIN — existing users only
-  const handleGoogleLogin = () => {
-    setGoogleLoading(true);
-    window.location.href = "/api/auth/google?mode=login";
-  };
-
- useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const error = params.get("error");
-
-  if (error) {
-    if (error === "already_exists") {
-      toast.error("Account already exists. Please login.");
-    }
-
-    // remove error from URL so toast won't fire again
-    window.history.replaceState({}, "", "/login");
-  }
-}, []);
-
-
-
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-slate-950">
       <Navbar />
 
-      <div className="flex justify-center items-center min-h-[80vh] px-4">
+      {/* Fix: spacing so card does NOT touch navbar */}
+      <div className="flex justify-center items-start pt-16 pb-10 min-h-screen px-4">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg p-6 md:p-8 w-full max-w-md">
+
           <h2 className="text-2xl md:text-3xl font-bold text-center mb-6">
-            Welcome!
+            Create your LifeLink Account
           </h2>
 
           <p className="text-center text-slate-400 text-sm mb-6">
-            Login to manage requests or donate blood.
+            Sign up using Google or Email.
           </p>
 
-          {/* GOOGLE LOGIN */}
+          {/* GOOGLE SIGNUP */}
           <button
-            onClick={handleGoogleLogin}
+            onClick={handleGoogleSignup}
             disabled={googleLoading}
             className={`w-full py-3 rounded-lg font-medium flex items-center justify-center gap-3
-              border border-slate-700 bg-slate-900 hover:bg-slate-800
-              transition-all text-white mb-4
-              ${googleLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+            border border-slate-700 bg-slate-900 hover:bg-slate-800
+            transition-all text-white mb-4
+            ${googleLoading ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {googleLoading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-400"></div>
@@ -111,7 +116,7 @@ export default function LoginPage() {
                 className="w-5 h-5"
               />
             )}
-            {googleLoading ? "Connecting..." : "Continue with Google"}
+            {googleLoading ? "Connecting..." : "Sign up with Google"}
           </button>
 
           {/* Divider */}
@@ -121,34 +126,45 @@ export default function LoginPage() {
             <div className="flex-grow h-px bg-slate-700"></div>
           </div>
 
-          {/* EMAIL FORM */}
+          {/* EMAIL SIGNUP FORM */}
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+            {/* FULL NAME */}
             <div>
-              <Input label="Email" type="email" {...register("email")} />
+              <Input label="Full Name" {...register("name")} />
+              {errors.name && (
+                <p className="text-red-400 text-sm mt-1">{errors.name.message}</p>
+              )}
+            </div>
+
+            {/* EMAIL */}
+            <div>
+              <Input type="email" label="Email" {...register("email")} />
               {errors.email && (
                 <p className="text-red-400 text-sm mt-1">{errors.email.message}</p>
               )}
             </div>
 
+            {/* PASSWORD */}
             <div>
-              <Input label="Password" type="password" {...register("password")} />
+              <Input type="password" label="Password" {...register("password")} />
               {errors.password && (
                 <p className="text-red-400 text-sm mt-1">{errors.password.message}</p>
               )}
             </div>
 
             <Button className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Logging in..." : "Login with Email"}
+              {isSubmitting ? "Creating account..." : "Sign up with Email"}
             </Button>
           </form>
 
+          {/* Redirect */}
           <p className="text-center text-xs text-slate-400 mt-4">
-            New here?{" "}
+            Already have an account?{" "}
             <span
-              onClick={() => router.push("/signup")}
+              onClick={() => router.push("/login")}
               className="text-red-400 hover:underline cursor-pointer"
             >
-              Create an account
+              Login
             </span>
           </p>
         </div>

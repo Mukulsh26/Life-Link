@@ -6,7 +6,8 @@ const UserSchema = new mongoose.Schema(
 
     email: { type: String, required: true, unique: true },
 
-    password: { type: String, required: true }, // hashed password
+    // 🔥 FIX: REMOVE required, add default: null
+    password: { type: String, required: false, default: null },
 
     role: {
       type: String,
@@ -14,20 +15,21 @@ const UserSchema = new mongoose.Schema(
       default: "donor",
     },
 
-    // For donors
-    bloodGroup: { type: String },
-    city: { type: String },
-    lastDonationDate: { type: Date },
+    profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
 
-    // For hospitals
-    hospitalName: { type: String },
-    contactNumber: { type: String },
+    bloodGroup: { type: String, default: null },
+    city: { type: String, default: null },
+    lastDonationDate: { type: Date, default: null },
 
-    // Push notifications (later when you add FCM)
-    deviceToken: { type: String },
+    hospitalName: { type: String, default: null },
+    contactNumber: { type: String, default: null },
+
+    deviceToken: { type: String, default: null },
   },
   { timestamps: true }
 );
 
-// Fix hot-reload model overwrite issue
 export default mongoose.models.User || mongoose.model("User", UserSchema);

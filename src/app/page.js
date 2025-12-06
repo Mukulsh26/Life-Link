@@ -43,11 +43,12 @@ export default function HomePage() {
           {!user && (
             <>
               <button
-                onClick={() => router.push("/register")}
+                onClick={() => router.push("/signup")}
                 className="px-8 py-3 text-lg font-semibold bg-red-600 hover:bg-red-700 rounded-xl shadow-lg shadow-red-900/20 transition-all active:scale-95"
               >
                 Join as Donor / Hospital
               </button>
+              
 
               <button
                 onClick={() => router.push("/login")}

@@ -1,21 +1,17 @@
-export default function Input({ label, className = "", ...props }) {
-  return (
-    <div className="flex flex-col gap-1 text-sm">
-      {label && <label className="text-slate-300 font-medium">{label}</label>}
+import React from "react";
 
+const Input = React.forwardRef(({ label, ...props }, ref) => {
+  return (
+    <div className="flex flex-col text-sm">
+      <label className="text-slate-300 mb-1">{label}</label>
       <input
+        ref={ref}
         {...props}
-        className={`
-          px-3 py-2 rounded-lg 
-          bg-slate-900 
-          border border-slate-700 
-          focus:ring-2 focus:ring-red-500 
-          outline-none 
-          placeholder:text-slate-500 
-          transition-all
-          ${className}
-        `}
+        className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-white"
       />
     </div>
   );
-}
+});
+
+Input.displayName = "Input";
+export default Input;

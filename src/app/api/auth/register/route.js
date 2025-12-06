@@ -3,76 +3,56 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../../../../lib/db";
 import User from "../../../../models/User";
+import { signToken } from "../../../../lib/auth";
 
 export async function POST(req) {
   try {
     await connectDB();
 
-    let body = await req.json();
+    const { name, email, password } = await req.json();
 
-    // ⭐ NORMALIZE USER INPUTS (VERY IMPORTANT)
-    if (body.city) body.city = body.city.trim().toLowerCase();
-    if (body.bloodGroup) body.bloodGroup = body.bloodGroup.trim().toUpperCase();
-    if (body.hospitalName) body.hospitalName = body.hospitalName.trim();
-    if (body.name) body.name = body.name.trim();
-
-    const {
-      name,
-      email,
-      password,
-      role,
-      bloodGroup,
-      city,
-      hospitalName,
-      contactNumber,
-    } = body;
-
-    // Basic validation
     if (!name || !email || !password) {
-      return NextResponse.json(
-        { error: "Name, email and password are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
     const existing = await User.findOne({ email });
     if (existing) {
       return NextResponse.json(
-        { error: "Email already registered" },
+        { error: "User already exists" },
         { status: 400 }
       );
     }
 
     const hashed = await bcrypt.hash(password, 10);
 
-    // ⭐ Normalize role (fallback donor)
-    const userRole = role === "hospital" ? "hospital" : "donor";
-
     const user = await User.create({
       name,
       email,
       password: hashed,
-      role: userRole,
-
-      // ⭐ Donor-specific fields
-      bloodGroup: userRole === "donor" ? bloodGroup : undefined,
-      city,
-      contactNumber,
-      hospitalName: userRole === "hospital" ? hospitalName : undefined,
+      role: null,
+      profileCompleted: false,
     });
+
+    const token = signToken({ id: user._id });
+
+    const safeUser = {
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: null,
+      profileCompleted: false,
+    };
 
     return NextResponse.json(
       {
-        message: "User registered successfully",
-        userId: user._id,
+        success: true,
+        token,
+        user: safeUser,
       },
-      { status: 201 }
+      { status: 200 }
     );
-  } catch (e) {
-    console.error("Register error:", e);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
