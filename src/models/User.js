@@ -7,7 +7,12 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
 
     // 🔥 FIX: REMOVE required, add default: null
-    password: { type: String, required: false, default: null },
+    password: { type: String, required: false},
+    state: { type: String, required: false},
+    city: { type: String, required: false},
+    pincode: { type: String, required: false},
+    address: { type: String, required: false},
+
 
     role: {
       type: String,

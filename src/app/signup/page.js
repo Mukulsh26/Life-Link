@@ -9,10 +9,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLoader } from "../context/LoaderContext"; 
 
-// --------------------------
-// ✅ ZOD VALIDATION SCHEMA
-// --------------------------
 const SignupSchema = z.object({
   name: z.string().min(2, "Full name must be at least 2 characters"),
   email: z.string().email("Enter a valid email"),
@@ -21,6 +19,7 @@ const SignupSchema = z.object({
 
 export default function SignupPage() {
   const router = useRouter();
+  const { setLoading } = useLoader(); 
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const {
@@ -31,34 +30,26 @@ export default function SignupPage() {
     resolver: zodResolver(SignupSchema),
   });
 
-  // Show clean errors from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const error = params.get("error");
 
-    if (error === "already_exists") {
-      toast.error("Account already exists. Please login.");
-    }
-    if (error === "no_account") {
-      toast.error("No account found. Please create one.");
-    }
+    if (error === "already_exists") toast.error("Account already exists.");
+    if (error === "no_account") toast.error("No account found.");
 
     window.history.replaceState({}, "", "/signup");
   }, []);
 
-  // --------------------------
-  // 🔥 GOOGLE SIGNUP
-  // --------------------------
   const handleGoogleSignup = () => {
     setGoogleLoading(true);
+    setLoading(true); 
     window.location.href = "/api/auth/google?mode=signup";
   };
 
-  // --------------------------
-  // ✨ EMAIL SIGNUP HANDLER
-  // --------------------------
   const onSubmit = async (values) => {
     try {
+      setLoading(true); 
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         body: JSON.stringify(values),
@@ -68,10 +59,10 @@ export default function SignupPage() {
 
       if (!res.ok) {
         toast.error(data.error);
+        setLoading(false);
         return;
       }
 
-      // save token + user
       localStorage.setItem("lifelink_token", data.token);
       localStorage.setItem("lifelink_user", JSON.stringify(data.user));
 
@@ -79,6 +70,8 @@ export default function SignupPage() {
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong");
+    } finally {
+      setLoading(false); 
     }
   };
 
@@ -86,7 +79,6 @@ export default function SignupPage() {
     <main className="min-h-screen bg-slate-950">
       <Navbar />
 
-      {/* Fix: spacing so card does NOT touch navbar */}
       <div className="flex justify-center items-start pt-16 pb-10 min-h-screen px-4">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg p-6 md:p-8 w-full max-w-md">
 
@@ -98,7 +90,7 @@ export default function SignupPage() {
             Sign up using Google or Email.
           </p>
 
-          {/* GOOGLE SIGNUP */}
+
           <button
             onClick={handleGoogleSignup}
             disabled={googleLoading}
@@ -119,16 +111,15 @@ export default function SignupPage() {
             {googleLoading ? "Connecting..." : "Sign up with Google"}
           </button>
 
-          {/* Divider */}
           <div className="flex items-center my-4">
             <div className="flex-grow h-px bg-slate-700"></div>
             <span className="px-2 text-slate-400 text-sm">OR</span>
             <div className="flex-grow h-px bg-slate-700"></div>
           </div>
 
-          {/* EMAIL SIGNUP FORM */}
+
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            {/* FULL NAME */}
+
             <div>
               <Input label="Full Name" {...register("name")} />
               {errors.name && (
@@ -136,7 +127,7 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* EMAIL */}
+
             <div>
               <Input type="email" label="Email" {...register("email")} />
               {errors.email && (
@@ -144,7 +135,7 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* PASSWORD */}
+
             <div>
               <Input type="password" label="Password" {...register("password")} />
               {errors.password && (
@@ -157,7 +148,7 @@ export default function SignupPage() {
             </Button>
           </form>
 
-          {/* Redirect */}
+
           <p className="text-center text-xs text-slate-400 mt-4">
             Already have an account?{" "}
             <span

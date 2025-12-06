@@ -20,7 +20,8 @@ export async function POST(req) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
   // Create JWT
-  const token = signToken({ id: user._id });
+  const token = signToken({ id: user._id, role: user.role });
+
 
   // Prepare safe user object
   const safeUser = {

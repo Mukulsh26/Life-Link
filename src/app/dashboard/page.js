@@ -11,9 +11,12 @@ import RequestCard from "../components/RequestCard";
 import { toast } from "sonner";
 import { requestFcmToken } from "../../lib/firebase";
 import { pusherClient } from "../../lib/pusher-client";
+import { useLoader } from "../context/LoaderContext";
 
 export default function Dashboard() {
+  const { setLoading } = useLoader();
   const router = useRouter();
+
   const [user, setUser] = useState(null);
 
   const [tab, setTab] = useState("requests");
@@ -21,17 +24,17 @@ export default function Dashboard() {
 
   const [requests, setRequests] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
+  const [history, setHistory] = useState([]);
 
   const [newReq, setNewReq] = useState({
     bloodGroup: "",
-    quantity: 1,
+    units: 1,
     urgency: "medium",
-    city: "",
     notes: "",
   });
 
   // ---------------------------------------------------------
-  // 1️⃣ LOAD USER + INITIAL REQUESTS
+  // LOAD USER + INITIAL REQUESTS
   // ---------------------------------------------------------
   useEffect(() => {
     const token = localStorage.getItem("lifelink_token");
@@ -46,16 +49,15 @@ export default function Dashboard() {
 
     if (u.role === "donor") loadDonorRequests(u, token);
     if (u.role === "hospital") loadHospitalRequests(token);
-
   }, []);
 
   // ---------------------------------------------------------
-  // 2️⃣ INITIAL FCM TOKEN REGISTRATION
+  // FCM TOKEN REGISTRATION
   // ---------------------------------------------------------
   useEffect(() => {
     if (!user) return;
 
-    const setupFcm = async () => {
+    const setup = async () => {
       try {
         const token = await requestFcmToken();
         if (!token) return;
@@ -68,62 +70,45 @@ export default function Dashboard() {
           },
           body: JSON.stringify({ deviceToken: token }),
         });
-
-        console.log("Device token saved");
-      } catch (err) {
-        console.error(err);
-      }
+      } catch {}
     };
 
-    setupFcm();
+    setup();
   }, [user]);
 
   // ---------------------------------------------------------
-  // 3️⃣ REAL-TIME (DONOR)
+  // REAL-TIME DONOR
   // ---------------------------------------------------------
   useEffect(() => {
     if (!user || user.role !== "donor") return;
 
     const channel = pusherClient.subscribe("blood-requests");
 
-    // New matching request
-    channel.bind("new-request", (data) => {
-      if (
-        data.city === user.city.toLowerCase() &&
-        data.bloodGroup === user.bloodGroup.toUpperCase()
-      ) {
-        loadDonorRequests(user, localStorage.getItem("lifelink_token"));
-      }
+    channel.bind("new-request", () => {
+      loadDonorRequests(user, localStorage.getItem("lifelink_token"));
     });
 
-    // Deleted request
     channel.bind("delete-request", (data) => {
       setRequests((prev) => prev.filter((r) => r._id !== data.requestId));
     });
 
-    // Status changed
     channel.bind("status-change", (data) => {
       setRequests((prev) =>
-        prev.map((r) =>
-          r._id === data.requestId ? { ...r, status: data.status } : r
-        )
+        prev.map((r) => (r._id === data.requestId ? { ...r, status: data.status } : r))
       );
     });
 
-    return () => {
-      pusherClient.unsubscribe("blood-requests");
-    };
+    return () => channel.unsubscribe();
   }, [user]);
 
   // ---------------------------------------------------------
-  // 4️⃣ REAL-TIME (HOSPITAL - DONOR RESPONDED)
+  // REAL-TIME HOSPITAL
   // ---------------------------------------------------------
   useEffect(() => {
     if (!user || user.role !== "hospital") return;
 
     const channel = pusherClient.subscribe("blood-requests");
 
-    // Donor responded
     channel.bind("donor-responded", (data) => {
       setMyRequests((prev) =>
         prev.map((r) =>
@@ -134,157 +119,229 @@ export default function Dashboard() {
       );
     });
 
-    // Deleted request
     channel.bind("delete-request", (data) => {
       setMyRequests((prev) => prev.filter((r) => r._id !== data.requestId));
     });
 
-    // Status changed
     channel.bind("status-change", (data) => {
       setMyRequests((prev) =>
-        prev.map((r) =>
-          r._id === data.requestId ? { ...r, status: data.status } : r
-        )
+        prev.map((r) => (r._id === data.requestId ? { ...r, status: data.status } : r))
       );
     });
 
-    return () => {
-      pusherClient.unsubscribe("blood-requests");
-    };
+    return () => channel.unsubscribe();
   }, [user]);
 
   // ---------------------------------------------------------
-  // LOAD REQUESTS
+  // HISTORY LOADER
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
+    loadHistory();
+  }, [tab, hTab]);
+
+  // ---------------------------------------------------------
+  // LOAD DONOR REQUESTS
   // ---------------------------------------------------------
   const loadDonorRequests = async (u, token) => {
-    const res = await fetch(
-      `/api/requests/list?role=donor&city=${encodeURIComponent(
-        u.city
-      )}&bloodGroup=${encodeURIComponent(u.bloodGroup)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    try {
+      setLoading(true);
 
-    const data = await res.json();
+      const res = await fetch(
+        `/api/requests/list?role=donor&city=${encodeURIComponent(
+          u.city
+        )}&bloodGroup=${encodeURIComponent(u.bloodGroup)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    if (res.ok) {
-      const formatted = data.requests.map((r) => ({
-        ...r,
-        responded: r.responders?.some(
-          (p) => p.donor === u._id || p.donor?._id === u._id
-        ),
-      }));
-      setRequests(formatted);
+      const data = await res.json();
+
+      if (res.ok) {
+        const formatted = data.requests.map((r) => ({
+          ...r,
+          responded: r.responders?.some(
+            (p) => p.donor === u._id || p.donor?._id === u._id
+          ),
+        }));
+
+        setRequests(formatted);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
+  // ---------------------------------------------------------
+  // LOAD HOSPITAL REQUESTS
+  // ---------------------------------------------------------
   const loadHospitalRequests = async (token) => {
-    const res = await fetch(`/api/requests/list?role=hospital`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    try {
+      setLoading(true);
 
-    const data = await res.json();
-    if (res.ok) setMyRequests(data.requests);
+      const res = await fetch(`/api/requests/list?role=hospital`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (res.ok) setMyRequests(data.requests);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ---------------------------------------------------------
-  // CRUD ACTIONS
+  // LOAD HISTORY
+  // ---------------------------------------------------------
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+
+      const token = localStorage.getItem("lifelink_token");
+
+      const endpoint =
+        user.role === "donor"
+          ? "/api/history/donor"
+          : "/api/history/hospital";
+
+      const res = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (res.ok) setHistory(data.history);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------
+  // CREATE REQUEST
   // ---------------------------------------------------------
   const createRequest = async (e) => {
     e.preventDefault();
 
-    const token = localStorage.getItem("lifelink_token");
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("lifelink_token");
 
-    const payload = {
-      ...newReq,
-      city: newReq.city || user.city,
-    };
+      const payload = {
+        bloodGroup: newReq.bloodGroup,
+        units: newReq.units,
+        urgency: newReq.urgency,
+        notes: newReq.notes,
+      };
 
-    const res = await fetch("/api/requests/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+      const res = await fetch("/api/requests/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      toast.error(data.error);
-      return;
+      if (!res.ok) return toast.error(data.error);
+
+      toast.success("Request created");
+      loadHospitalRequests(token);
+
+      setNewReq({
+        bloodGroup: "",
+        units: 1,
+        urgency: "medium",
+        notes: "",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    toast.success("Request created");
-    loadHospitalRequests(token);
-
-    setNewReq({
-      bloodGroup: "",
-      quantity: 1,
-      urgency: "medium",
-      city: "",
-      notes: "",
-    });
   };
 
+  // ---------------------------------------------------------
+  // DONOR RESPOND
+  // ---------------------------------------------------------
   const respond = async (id) => {
-    const token = localStorage.getItem("lifelink_token");
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("lifelink_token");
 
-    const res = await fetch("/api/requests/respond", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ requestId: id }),
-    });
+      const res = await fetch("/api/requests/respond", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId: id }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) return toast.error(data.error);
+      if (!res.ok) return toast.error(data.error);
 
-    toast.success("Response submitted");
-    loadDonorRequests(user, token);
+      toast.success("Response submitted");
+      loadDonorRequests(user, token);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // ---------------------------------------------------------
+  // DELETE REQUEST
+  // ---------------------------------------------------------
   const deleteRequest = async (id) => {
-    const token = localStorage.getItem("lifelink_token");
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("lifelink_token");
 
-    const res = await fetch("/api/requests/delete", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ requestId: id }),
-    });
+      const res = await fetch("/api/requests/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId: id }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) return toast.error(data.error);
+      if (!res.ok) return toast.error(data.error);
 
-    toast.success("Request deleted");
-    loadHospitalRequests(token);
+      toast.success("Request deleted");
+      loadHospitalRequests(token);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // ---------------------------------------------------------
+  // CHANGE STATUS
+  // ---------------------------------------------------------
   const changeStatus = async (id, status) => {
-    const token = localStorage.getItem("lifelink_token");
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("lifelink_token");
 
-    const res = await fetch("/api/requests/status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ requestId: id, status }),
-    });
+      const res = await fetch("/api/requests/status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId: id, status }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) return toast.error(data.error);
+      if (!res.ok) return toast.error(data.error);
 
-    toast.success("Status updated");
-    loadHospitalRequests(token);
+      toast.success("Status updated");
+      loadHospitalRequests(token);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ---------------------------------------------------------
@@ -309,29 +366,43 @@ export default function Dashboard() {
         {/* --------------------------------------------------- */}
         {user.role === "donor" && (
           <>
-            <div className="flex gap-3 mt-3">
-              <button
-                onClick={() => setTab("requests")}
-                className={`px-3 py-2 rounded-lg border ${
-                  tab === "requests"
-                    ? "border-red-500 bg-red-500/20"
-                    : "border-slate-700"
-                }`}
-              >
-                Matching Requests
-              </button>
 
-              <button
-                onClick={() => setTab("profile")}
-                className={`px-3 py-2 rounded-lg border ${
-                  tab === "profile"
-                    ? "border-red-500 bg-red-500/20"
-                    : "border-slate-700"
-                }`}
-              >
-                Profile
-              </button>
-            </div>
+
+            <div className="flex gap-3 mt-3">
+  <button
+    onClick={() => setTab("requests")}
+    className={`px-3 py-2 rounded-lg border ${
+      tab === "requests"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    Matching Requests
+  </button>
+
+  <button
+    onClick={() => setTab("profile")}
+    className={`px-3 py-2 rounded-lg border ${
+      tab === "profile"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    Profile
+  </button>
+
+  <button
+    onClick={() => setTab("history")}
+    className={`px-3 py-2 rounded-lg border ${
+      tab === "history"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    History
+  </button>
+</div>
+
 
             {tab === "requests" && (
               <div className="grid gap-4 mt-6">
@@ -361,7 +432,7 @@ export default function Dashboard() {
                   {[ 
                     ["Name", user.name],
                     ["Email", user.email],
-                    ["City", user.city],
+                    ["Location", `${user.city}, ${user.state} - ${user.pincode}`],
                     ["Blood Group", user.bloodGroup],
                     ["Contact Number", user.contactNumber],
                   ].map(([label, value]) => (
@@ -388,6 +459,34 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+
+             {tab === "history" && (
+  <div className="grid gap-4 mt-6">
+    {history.length === 0 && (
+      <p className="text-slate-400">No history yet.</p>
+    )}
+
+    {history.map((r) => (
+      <div
+        key={r._id}
+        className="p-4 bg-slate-900 border border-slate-800 rounded-xl"
+      >
+        <p className="font-semibold text-red-400">
+          {r.bloodGroup} needed
+        </p>
+
+        <p className="text-sm text-slate-400 mt-1">
+          {r.city} • {new Date(r.createdAt).toLocaleString()}
+        </p>
+
+        <p className="text-xs text-slate-500 mt-2">
+          Hospital: {r.hospital?.hospitalName}
+        </p>
+      </div>
+    ))}
+  </div>
+)}
+            
           </>
         )}
 
@@ -396,29 +495,42 @@ export default function Dashboard() {
         {/* --------------------------------------------------- */}
         {user.role === "hospital" && (
           <>
-            <div className="flex gap-3 mt-3">
-              <button
-                onClick={() => setHTab("create")}
-                className={`px-3 py-2 rounded-lg border ${
-                  hTab === "create"
-                    ? "border-red-500 bg-red-500/20"
-                    : "border-slate-700"
-                }`}
-              >
-                Create Request
-              </button>
 
-              <button
-                onClick={() => setHTab("my")}
-                className={`px-3 py-2 rounded-lg border ${
-                  hTab === "my"
-                    ? "border-red-500 bg-red-500/20"
-                    : "border-slate-700"
-                }`}
-              >
-                My Requests
-              </button>
-            </div>
+            <div className="flex gap-3 mt-3">
+  <button
+    onClick={() => setHTab("create")}
+    className={`px-3 py-2 rounded-lg border ${
+      hTab === "create"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    Create Request
+  </button>
+
+  <button
+    onClick={() => setHTab("my")}
+    className={`px-3 py-2 rounded-lg border ${
+      hTab === "my"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    My Requests
+  </button>
+
+  <button
+    onClick={() => setHTab("history")}
+    className={`px-3 py-2 rounded-lg border ${
+      hTab === "history"
+        ? "border-red-500 bg-red-500/20"
+        : "border-slate-700"
+    }`}
+  >
+    History
+  </button>
+</div>
+
 
             {hTab === "create" && (
               <form onSubmit={createRequest} className="card mt-6 space-y-4">
@@ -442,11 +554,11 @@ export default function Dashboard() {
                 </div>
 
                 <Input
-                  label="Quantity"
+                  label="Units"
                   type="number"
-                  value={newReq.quantity}
+                  value={newReq.units}
                   onChange={(e) =>
-                    setNewReq({ ...newReq, quantity: e.target.value })
+                    setNewReq({ ...newReq, units: e.target.value })
                   }
                 />
 
@@ -465,14 +577,6 @@ export default function Dashboard() {
                     <option value="emergency">Emergency</option>
                   </select>
                 </div>
-
-                <Input
-                  label="City"
-                  value={newReq.city}
-                  onChange={(e) =>
-                    setNewReq({ ...newReq, city: e.target.value })
-                  }
-                />
 
                 <textarea
                   placeholder="Additional notes"
@@ -505,6 +609,33 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+
+            {hTab === "history" && (
+  <div className="grid gap-4 mt-6">
+    {history.length === 0 && (
+      <p className="text-slate-400">No requests created yet.</p>
+    )}
+
+    {history.map((r) => (
+      <div
+        key={r._id}
+        className="p-4 bg-slate-900 border border-slate-800 rounded-xl"
+      >
+        <p className="font-semibold text-red-400">
+          {r.bloodGroup} • {r.city}
+        </p>
+
+        <p className="text-sm text-slate-400 mt-1">
+          {new Date(r.createdAt).toLocaleString()}
+        </p>
+
+        <p className="text-sm text-red-300 mt-2">
+          Responders: {r.responders?.length}
+        </p>
+      </div>
+    ))}
+  </div>
+)}
           </>
         )}
       </div>

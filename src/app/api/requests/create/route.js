@@ -24,46 +24,52 @@ export async function POST(req) {
     }
 
     // Read incoming JSON body
-    let { bloodGroup, quantity, urgency, city, notes } = await req.json();
+    let { bloodGroup, units, urgency, notes } = await req.json();
 
-    bloodGroup = decodeURIComponent(bloodGroup || "");
-    city = decodeURIComponent(city || "");
+    bloodGroup = decodeURIComponent(bloodGroup || "").trim().toUpperCase();
 
-    if (!bloodGroup || !city) {
+    if (!bloodGroup) {
       return NextResponse.json(
-        { error: "Blood group and city are required" },
+        { error: "Blood group is required" },
         { status: 400 }
       );
     }
 
-    const cleanCity = city.trim().toLowerCase();
-    const cleanBG = bloodGroup.trim().toUpperCase();
+    // AUTO-USE hospital location
+    const cleanCity = (hospital.city || "").trim().toLowerCase();
+    const cleanState = hospital.state || "";
+    const cleanPincode = hospital.pincode || "";
+    const cleanAddress = hospital.address || "";
+    const hospitalName = hospital.hospitalName || "";
 
     // Create DB entry
     const reqDoc = await Request.create({
       hospital: hospital._id,
-      bloodGroup: cleanBG,
-      quantity: quantity || 1,
+      hospitalName,
+      bloodGroup,
+      units: units || 1,
       urgency: urgency || "medium",
       city: cleanCity,
+      state: cleanState,
+      pincode: cleanPincode,
+      address: cleanAddress,
       notes,
     });
 
-    // 🔥 REALTIME PUSHER EVENT (WORKING)
+    // 🔥 PUSHER EVENT
     await pusherServer.trigger("blood-requests", "new-request", {
       requestId: reqDoc._id.toString(),
       city: cleanCity,
-      bloodGroup: cleanBG,
-      urgency: urgency,
+      bloodGroup,
+      urgency,
+      hospitalName,
     });
 
-    console.log("Pusher event sent for new request");
-
-    // FCM code untouched
+    // 🔥 FCM Notif
     const donors = await User.find({
       role: "donor",
       city: cleanCity,
-      bloodGroup: cleanBG,
+      bloodGroup,
       deviceToken: { $exists: true, $ne: null },
     });
 
@@ -80,13 +86,11 @@ export async function POST(req) {
           body: JSON.stringify({
             registration_ids: tokens,
             notification: {
-              title: "Urgent Blood Request",
-              body: `${cleanBG} needed in ${cleanCity} (${urgency || "medium"})`,
+              title: `${bloodGroup} Blood Needed`,
+              body: `${hospitalName}, ${cleanCity} (${urgency})`,
             },
           }),
         });
-
-        console.log("FCM sent to donors:", tokens.length);
       } catch (err) {
         console.error("Error sending FCM:", err);
       }

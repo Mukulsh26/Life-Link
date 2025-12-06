@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import { useState, useEffect } from "react";
+import { useLoader } from "../context/LoaderContext";  // ✅ ADD THIS
 
 // Zod validation
 const LoginSchema = z.object({
@@ -18,6 +19,8 @@ const LoginSchema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setLoading } = useLoader(); // ✅ GLOBAL LOADER
+
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const {
@@ -28,9 +31,13 @@ export default function LoginPage() {
     resolver: zodResolver(LoginSchema),
   });
 
+  // ----------------------------------------
   // EMAIL LOGIN
+  // ----------------------------------------
   const onSubmit = async (values) => {
     try {
+      setLoading(true); // ✅ SHOW LOADER
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,34 +55,39 @@ export default function LoginPage() {
       localStorage.setItem("lifelink_user", JSON.stringify(data.user));
 
       toast.success("Logged in successfully");
-
-      // EXISTING USER → DASHBOARD
       router.push("/dashboard");
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong");
+    } finally {
+      setLoading(false); // ✅ HIDE LOADER
     }
   };
 
-  // GOOGLE LOGIN — existing users only
+  // ----------------------------------------
+  // GOOGLE LOGIN
+  // ----------------------------------------
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
+    setLoading(true); // ✅ SHOW LOADER globally
     window.location.href = "/api/auth/google?mode=login";
   };
 
- useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const error = params.get("error");
+  // ----------------------------------------
+  // HANDLE GOOGLE ERROR
+  // ----------------------------------------
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
 
-  if (error) {
-    if (error === "already_exists") {
-      toast.error("Account already exists. Please login.");
+    if (error) {
+      if (error === "already_exists") {
+        toast.error("Account already exists. Please login.");
+      }
+
+      window.history.replaceState({}, "", "/login");
     }
-
-    // remove error from URL so toast won't fire again
-    window.history.replaceState({}, "", "/login");
-  }
-}, []);
+  }, []);
 
 
 

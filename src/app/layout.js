@@ -1,6 +1,5 @@
-// src/app/layout.js
 import "./globals.css";
-import { ToastProvider } from "./components/ToastProvider";
+import ClientWrapper from "./clientWrapper";
 
 export const metadata = {
   title: "LifeLink - Blood Donation System",
@@ -11,8 +10,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-950 text-slate-100">
-        <ToastProvider />
-        {children}
+        <ClientWrapper>{children}</ClientWrapper>
       </body>
     </html>
   );

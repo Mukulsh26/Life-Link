@@ -94,7 +94,8 @@ if (mode === "signup") {
   }
 
   // Create JWT with user id
-  const token = signToken({ id: user._id });
+  const token = signToken({ id: user._id, role: user.role });
+
 
   // Send to a unified callback
   const redirectUrl =

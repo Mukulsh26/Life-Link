@@ -4,10 +4,12 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { useLoader } from "../context/LoaderContext"; // ✅ ADD THIS
 
 export default function RedirectAfterLogin() {
   const router = useRouter();
   const search = useSearchParams();
+  const { setLoading } = useLoader(); // ✅ GLOBAL LOADER
 
   useEffect(() => {
     const token = search.get("token");
@@ -17,6 +19,9 @@ export default function RedirectAfterLogin() {
       router.replace("/login");
       return;
     }
+
+    // Start loader
+    setLoading(true); // ✅ SHOW LOADER
 
     // Save token
     localStorage.setItem("lifelink_token", token);
@@ -37,7 +42,7 @@ export default function RedirectAfterLogin() {
 
         localStorage.setItem("lifelink_user", JSON.stringify(data.user));
 
-        // 👇 Decide target based on mode
+        // Redirect based on mode
         if (mode === "signup") {
           router.replace("/complete-profile");
         } else {
@@ -48,6 +53,9 @@ export default function RedirectAfterLogin() {
         console.error(err);
         toast.error("Login error");
         router.replace("/login");
+      })
+      .finally(() => {
+        setLoading(false); // ✅ HIDE LOADER
       });
   }, []);
 

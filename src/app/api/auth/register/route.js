@@ -33,7 +33,8 @@ export async function POST(req) {
       profileCompleted: false,
     });
 
-    const token = signToken({ id: user._id });
+    const token = signToken({ id: user._id, role: user.role });
+
 
     const safeUser = {
       id: user._id.toString(),
