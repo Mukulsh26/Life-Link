@@ -8,10 +8,8 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { State, City } from "country-state-city";
+import { useLoader } from "../context/LoaderContext";
 
-// ------------------------------
-// ZOD SCHEMAS
-// ------------------------------
 const donorSchema = z.object({
   role: z.literal("donor"),
   state: z.string().min(1, "State is required"),
@@ -41,15 +39,13 @@ export default function CompleteProfile() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
+  const { setLoading } = useLoader();
   const [role, setRole] = useState("");
   const [states, setStates] = useState([]);
-const [cities, setCities] = useState([]);
-const [selectedState, setSelectedState] = useState("");
+  const [cities, setCities] = useState([]);
+  const [selectedState, setSelectedState] = useState("");
 
 
-  // ------------------------------
-  // Load User + Protect Route
-  // ------------------------------
   useEffect(() => {
     const token = localStorage.getItem("lifelink_token");
     const u = JSON.parse(localStorage.getItem("lifelink_user") || "{}");
@@ -68,16 +64,16 @@ const [selectedState, setSelectedState] = useState("");
   }, []);
 
   useEffect(() => {
-  const indianStates = State.getStatesOfCountry("IN");
-  setStates(indianStates);
-}, []);
+    const indianStates = State.getStatesOfCountry("IN");
+    setStates(indianStates);
+  }, []);
 
 
-useEffect(() => {
-  if (!selectedState) return;
-  const citiesList = City.getCitiesOfState("IN", selectedState);
-  setCities(citiesList);
-}, [selectedState]);
+  useEffect(() => {
+    if (!selectedState) return;
+    const citiesList = City.getCitiesOfState("IN", selectedState);
+    setCities(citiesList);
+  }, [selectedState]);
 
 
 
@@ -97,11 +93,9 @@ useEffect(() => {
     setValue("contactNumber", clean);
   };
 
-  // ------------------------------
-  // SUBMIT FORM
-  // ------------------------------
   const onSubmit = async (values) => {
     try {
+      setLoading(true);
       const res = await fetch("/api/complete-profile", {
         method: "POST",
         headers: {
@@ -119,7 +113,7 @@ useEffect(() => {
       }
 
       localStorage.setItem("lifelink_token", data.token);
-localStorage.setItem("lifelink_user", JSON.stringify(data.user));
+      localStorage.setItem("lifelink_user", JSON.stringify(data.user));
 
 
       toast.success("Profile completed!");
@@ -127,14 +121,14 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong");
+    } finally {
+      setLoading(false);
     }
   };
 
   if (!user) return null;
 
-  // ------------------------------
-  // SVG ICONS (No files needed)
-  // ------------------------------
+
   const BloodIcon = () => (
     <svg
       className="w-8 h-8 text-red-400"
@@ -176,9 +170,7 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
             Choose your role to continue.
           </p>
 
-          {/* ------------------------------ */}
-          {/* 🔥 IMPROVED ROLE SELECTOR */}
-          {/* ------------------------------ */}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
 
             {/* Donor Card */}
@@ -188,10 +180,9 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
                 reset({ role: "donor" });
               }}
               className={`cursor-pointer rounded-xl border p-5 flex flex-col items-center gap-3 transition-all
-                ${
-                  role === "donor"
-                    ? "border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(255,0,0,0.3)]"
-                    : "border-slate-700 bg-slate-800/40 hover:border-red-400 hover:bg-slate-800"
+                ${role === "donor"
+                  ? "border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(255,0,0,0.3)]"
+                  : "border-slate-700 bg-slate-800/40 hover:border-red-400 hover:bg-slate-800"
                 }
               `}
             >
@@ -211,10 +202,9 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
                 reset({ role: "hospital" });
               }}
               className={`cursor-pointer rounded-xl border p-5 flex flex-col items-center gap-3 transition-all
-                ${
-                  role === "hospital"
-                    ? "border-blue-500 bg-blue-500/10 shadow-[0_0_15px_rgba(0,120,255,0.3)]"
-                    : "border-slate-700 bg-slate-800/40 hover:border-blue-400 hover:bg-slate-800"
+                ${role === "hospital"
+                  ? "border-blue-500 bg-blue-500/10 shadow-[0_0_15px_rgba(0,120,255,0.3)]"
+                  : "border-slate-700 bg-slate-800/40 hover:border-blue-400 hover:bg-slate-800"
                 }
               `}
             >
@@ -228,9 +218,7 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
             </div>
           </div>
 
-          {/* ------------------------------ */}
-          {/* FORM FIELDS */}
-          {/* ------------------------------ */}
+          
           {role && (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
@@ -239,69 +227,69 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
               {/* DONOR FORM */}
               {role === "donor" && (
                 <>
-                 {/* STATE */}
-<div>
-  <label className="block text-sm mb-1">State</label>
-  <select
-  {...register("state")}
-  value={selectedState}
-  onChange={(e) => {
-    setSelectedState(e.target.value);
-    setValue("state", e.target.value);
-    setValue("city", "");
-  }}
-  className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
->
-  <option value="">Select State</option>
-  {states.map((s) => (
-    <option key={s.isoCode} value={s.isoCode}>
-      {s.name}
-    </option>
-  ))}
-</select>
+                  {/* STATE */}
+                  <div>
+                    <label className="block text-sm mb-1">State</label>
+                    <select
+                      {...register("state")}
+                      value={selectedState}
+                      onChange={(e) => {
+                        setSelectedState(e.target.value);
+                        setValue("state", e.target.value);
+                        setValue("city", "");
+                      }}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    >
+                      <option value="">Select State</option>
+                      {states.map((s) => (
+                        <option key={s.isoCode} value={s.isoCode}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
 
-  {errors.state && <p className="text-red-400 text-sm">{errors.state.message}</p>}
-</div>
+                    {errors.state && <p className="text-red-400 text-sm">{errors.state.message}</p>}
+                  </div>
 
-{/* CITY */}
-<div>
-  <label className="block text-sm mb-1">City</label>
-  <select
-  {...register("city")}
-  className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
->
-  <option value="">Select City</option>
-  {cities.map((c) => (
-    <option key={c.name} value={c.name}>
-      {c.name}
-    </option>
-  ))}
-</select>
+                  {/* CITY */}
+                  <div>
+                    <label className="block text-sm mb-1">City</label>
+                    <select
+                      {...register("city")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    >
+                      <option value="">Select City</option>
+                      {cities.map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
 
-  {errors.city && <p className="text-red-400 text-sm">{errors.city.message}</p>}
-</div>
+                    {errors.city && <p className="text-red-400 text-sm">{errors.city.message}</p>}
+                  </div>
 
-{/* PINCODE */}
-<div>
-  <label className="block text-sm mb-1">Pincode</label>
-  <input
-    maxLength={6}
-    {...register("pincode")}
-    onChange={(e) => setValue("pincode", e.target.value.replace(/\D/g, ""))}
-    className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-  />
-  {errors.pincode && <p className="text-red-400 text-sm">{errors.pincode.message}</p>}
-</div>
+                  {/* PINCODE */}
+                  <div>
+                    <label className="block text-sm mb-1">Pincode</label>
+                    <input
+                      maxLength={6}
+                      {...register("pincode")}
+                      onChange={(e) => setValue("pincode", e.target.value.replace(/\D/g, ""))}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.pincode && <p className="text-red-400 text-sm">{errors.pincode.message}</p>}
+                  </div>
 
-{/* ADDRESS */}
-<div>
-  <label className="block text-sm mb-1">Address</label>
-  <textarea
-    {...register("address")}
-    className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-  />
-  {errors.address && <p className="text-red-400 text-sm">{errors.address.message}</p>}
-</div>
+                  {/* ADDRESS */}
+                  <div>
+                    <label className="block text-sm mb-1">Address</label>
+                    <textarea
+                      {...register("address")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.address && <p className="text-red-400 text-sm">{errors.address.message}</p>}
+                  </div>
 
                   <div>
                     <label className="block text-sm mb-1">Mobile Number</label>
@@ -348,14 +336,14 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
                   </div>
 
                   {/* LAST DONATION DATE */}
-<div>
-  <label className="block text-sm mb-1">Last Donation Date (optional)</label>
-  <input
-    type="date"
-    {...register("lastDonationDate")}
-    className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-  />
-</div>
+                  <div>
+                    <label className="block text-sm mb-1">Last Donation Date (optional)</label>
+                    <input
+                      type="date"
+                      {...register("lastDonationDate")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                  </div>
 
                 </>
               )}
@@ -363,94 +351,94 @@ localStorage.setItem("lifelink_user", JSON.stringify(data.user));
               {/* HOSPITAL FORM */}
               {role === "hospital" && (
                 <>
-  {/* HOSPITAL NAME */}
-  <div>
-    <label className="block text-sm mb-1">Hospital Name</label>
-    <input
-      {...register("hospitalName")}
-      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-    />
-    {errors.hospitalName && (
-      <p className="text-red-400 text-sm mt-1">
-        {errors.hospitalName.message}
-      </p>
-    )}
-  </div>
+                  {/* HOSPITAL NAME */}
+                  <div>
+                    <label className="block text-sm mb-1">Hospital Name</label>
+                    <input
+                      {...register("hospitalName")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.hospitalName && (
+                      <p className="text-red-400 text-sm mt-1">
+                        {errors.hospitalName.message}
+                      </p>
+                    )}
+                  </div>
 
-  {/* STATE */}
-  <div>
-    <label className="block text-sm mb-1">State</label>
-    <select
-  {...register("state")}
-  value={selectedState}
-  onChange={(e) => {
-    setSelectedState(e.target.value);
-    setValue("state", e.target.value);
-    setValue("city", "");
-  }}
-  className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
->
-  <option value="">Select State</option>
-  {states.map((s) => (
-    <option key={s.isoCode} value={s.isoCode}>
-      {s.name}
-    </option>
-  ))}
-</select>
-    {errors.state && <p className="text-red-400 text-sm">{errors.state.message}</p>}
-  </div>
+                  {/* STATE */}
+                  <div>
+                    <label className="block text-sm mb-1">State</label>
+                    <select
+                      {...register("state")}
+                      value={selectedState}
+                      onChange={(e) => {
+                        setSelectedState(e.target.value);
+                        setValue("state", e.target.value);
+                        setValue("city", "");
+                      }}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    >
+                      <option value="">Select State</option>
+                      {states.map((s) => (
+                        <option key={s.isoCode} value={s.isoCode}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.state && <p className="text-red-400 text-sm">{errors.state.message}</p>}
+                  </div>
 
-  {/* CITY */}
-  <div>
-    <label className="block text-sm mb-1">City</label>
-    <select
-  {...register("city")}
-  className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
->
-  <option value="">Select City</option>
-  {cities.map((c) => (
-    <option key={c.name} value={c.name}>
-      {c.name}
-    </option>
-  ))}
-</select>
-    {errors.city && <p className="text-red-400 text-sm">{errors.city.message}</p>}
-  </div>
+                  {/* CITY */}
+                  <div>
+                    <label className="block text-sm mb-1">City</label>
+                    <select
+                      {...register("city")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    >
+                      <option value="">Select City</option>
+                      {cities.map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.city && <p className="text-red-400 text-sm">{errors.city.message}</p>}
+                  </div>
 
-  {/* PINCODE */}
-  <div>
-    <label className="block text-sm mb-1">Pincode</label>
-    <input
-      maxLength={6}
-      {...register("pincode")}
-      onChange={(e) => setValue("pincode", e.target.value.replace(/\D/g, ""))}
-      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-    />
-    {errors.pincode && <p className="text-red-400 text-sm">{errors.pincode.message}</p>}
-  </div>
+                  {/* PINCODE */}
+                  <div>
+                    <label className="block text-sm mb-1">Pincode</label>
+                    <input
+                      maxLength={6}
+                      {...register("pincode")}
+                      onChange={(e) => setValue("pincode", e.target.value.replace(/\D/g, ""))}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.pincode && <p className="text-red-400 text-sm">{errors.pincode.message}</p>}
+                  </div>
 
-  {/* ADDRESS */}
-  <div>
-    <label className="block text-sm mb-1">Full Address</label>
-    <textarea
-      {...register("address")}
-      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-    />
-    {errors.address && <p className="text-red-400 text-sm">{errors.address.message}</p>}
-  </div>
+                  {/* ADDRESS */}
+                  <div>
+                    <label className="block text-sm mb-1">Full Address</label>
+                    <textarea
+                      {...register("address")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.address && <p className="text-red-400 text-sm">{errors.address.message}</p>}
+                  </div>
 
-  {/* CONTACT NUMBER */}
-  <div>
-    <label className="block text-sm mb-1">Hospital Contact Number</label>
-    <input
-      {...register("contactNumber")}
-      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
-    />
-    {errors.contactNumber && (
-      <p className="text-red-400 text-sm">{errors.contactNumber.message}</p>
-    )}
-  </div>
-</>
+                  {/* CONTACT NUMBER */}
+                  <div>
+                    <label className="block text-sm mb-1">Hospital Contact Number</label>
+                    <input
+                      {...register("contactNumber")}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded"
+                    />
+                    {errors.contactNumber && (
+                      <p className="text-red-400 text-sm">{errors.contactNumber.message}</p>
+                    )}
+                  </div>
+                </>
               )}
 
               <button className="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition">

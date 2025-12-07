@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 import Navbar from "../components/Navbar";
 import Input from "../components/Input";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { requestFcmToken } from "../../lib/firebase";
 import { pusherClient } from "../../lib/pusher-client";
 import { useLoader } from "../context/LoaderContext";
+import DeleteConfirmModal from "../components/DeleteConfirmModal";
 
 export default function Dashboard() {
   const { setLoading } = useLoader();
@@ -32,6 +34,17 @@ export default function Dashboard() {
     urgency: "medium",
     notes: "",
   });
+
+  const [deleteId, setDeleteId] = useState(null);
+
+  const askDelete = (id) => {
+    setDeleteId(id);   // open modal
+  };
+
+  const confirmDelete = async () => {
+    await deleteRequest(deleteId); // your old function
+    setDeleteId(null);             // close modal
+  };
 
   // ---------------------------------------------------------
   // LOAD USER + INITIAL REQUESTS
@@ -351,294 +364,280 @@ export default function Dashboard() {
   // DASHBOARD UI
   // ---------------------------------------------------------
   return (
-    <main className="min-h-screen">
-      <Navbar />
+  <main className="min-h-screen bg-slate-950 text-white">
+    <Navbar />
 
-      <div className="max-w-6xl mx-auto px-4 pt-6">
-        <h1 className="text-3xl font-bold mb-2">
-          Welcome {user.role === "hospital" ? user.hospitalName : user.name}!
+    <div className="max-w-6xl mx-auto px-4 pt-10">
+
+      {/* HEADER */}
+      <div className="text-center mb-10">
+        <h1 className="text-4xl font-extrabold tracking-tight">
+          Welcome,
+          <span className="text-red-500 ml-2">
+            {user.role === "hospital" ? user.hospitalName : user.name}!
+          </span>
         </h1>
 
-        <p className="text-slate-400 mb-6 capitalize">Role: {user.role}</p>
+        <p className="text-slate-400 mt-2 text-sm uppercase tracking-widest">
+          {user.role} Dashboard
+        </p>
 
-        {/* --------------------------------------------------- */}
-        {/* DONOR DASHBOARD */}
-        {/* --------------------------------------------------- */}
-        {user.role === "donor" && (
-          <>
+        {/* Underline Glow */}
+        <div className="w-24 h-1 bg-red-600 mx-auto mt-3 rounded-full shadow-red-500/50 shadow-lg"></div>
+      </div>
 
+      {/* --------------------------------------------------- */}
+      {/* DONOR DASHBOARD */}
+      {/* --------------------------------------------------- */}
+      {user.role === "donor" && (
+        <>
+          {/* TABS */}
+          <div className="flex gap-4 justify-center mb-8">
+            {[
+              ["requests", "Matching Requests"],
+              ["profile", "Profile"],
+              ["history", "History"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`
+                  px-5 py-2 rounded-xl text-sm font-semibold transition-all backdrop-blur-md
+                  ${tab === key
+                    ? "bg-red-600/30 border border-red-500 shadow-lg shadow-red-800/40 text-red-300"
+                    : "bg-slate-900/40 border border-slate-700 hover:border-red-500 hover:bg-slate-800/50"}
+                `}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-            <div className="flex gap-3 mt-3">
-  <button
-    onClick={() => setTab("requests")}
-    className={`px-3 py-2 rounded-lg border ${
-      tab === "requests"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    Matching Requests
-  </button>
+          {/* MATCHING REQUESTS */}
+          {tab === "requests" && (
+            <div className="grid gap-5">
+              {requests.length === 0 && (
+                <p className="text-slate-400 text-center">No matching requests found.</p>
+              )}
 
-  <button
-    onClick={() => setTab("profile")}
-    className={`px-3 py-2 rounded-lg border ${
-      tab === "profile"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    Profile
-  </button>
-
-  <button
-    onClick={() => setTab("history")}
-    className={`px-3 py-2 rounded-lg border ${
-      tab === "history"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    History
-  </button>
-</div>
-
-
-            {tab === "requests" && (
-              <div className="grid gap-4 mt-6">
-                {requests.length === 0 && (
-                  <p className="text-slate-400">No matching requests.</p>
-                )}
-
-                {requests.map((req) => (
+              {requests.map((req) => (
+                <motion.div
+                  key={req._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                >
                   <RequestCard
-                    key={req._id}
                     request={req}
                     isDonor
                     onRespond={() => respond(req._id)}
                   />
-                ))}
-              </div>
-            )}
+                </motion.div>
+              ))}
+            </div>
+          )}
 
-            {tab === "profile" && (
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg mt-6">
+          {/* PROFILE */}
+          {tab === "profile" && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              className="bg-slate-900/60 backdrop-blur-md border border-slate-700 p-6 rounded-2xl shadow-xl"
+            >
+              <h2 className="text-2xl font-bold text-red-400 mb-4">Your Profile</h2>
 
-                <h2 className="text-xl font-bold text-red-400 mb-4">
-                  Your Profile
-                </h2>
-
-                <div className="space-y-3 text-sm">
-                  {[ 
-                    ["Name", user.name],
-                    ["Email", user.email],
-                    ["Location", `${user.city}, ${user.state} - ${user.pincode}`],
-                    ["Blood Group", user.bloodGroup],
-                    ["Contact Number", user.contactNumber],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="flex justify-between items-center border-b border-slate-800 pb-2"
-                    >
-                      <span className="text-slate-400">{label}</span>
-                      <span
-                        className={`font-semibold ${
-                          label === "Blood Group" || label === "Contact Number"
-                            ? "text-red-400"
-                            : "text-slate-200"
-                        }`}
-                      >
-                        {value}
-                      </span>
-                    </div>
-                  ))}
-
-                  <div className="mt-4 bg-red-600/20 text-red-300 p-3 rounded-lg text-center text-xs font-medium">
-                    Thank you for being a life-saving donor ❤️
+              <div className="space-y-4">
+                {[
+                  ["Name", user.name],
+                  ["Email", user.email],
+                  ["Location", `${user.city}, ${user.state} - ${user.pincode}`],
+                  ["Blood Group", user.bloodGroup],
+                  ["Contact Number", user.contactNumber],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex justify-between border-b border-slate-800 pb-2"
+                  >
+                    <span className="text-slate-400">{label}</span>
+                    <span className="font-semibold text-slate-200">{value}</span>
                   </div>
-                </div>
-              </div>
-            )}
-
-             {tab === "history" && (
-  <div className="grid gap-4 mt-6">
-    {history.length === 0 && (
-      <p className="text-slate-400">No history yet.</p>
-    )}
-
-    {history.map((r) => (
-      <div
-        key={r._id}
-        className="p-4 bg-slate-900 border border-slate-800 rounded-xl"
-      >
-        <p className="font-semibold text-red-400">
-          {r.bloodGroup} needed
-        </p>
-
-        <p className="text-sm text-slate-400 mt-1">
-          {r.city} • {new Date(r.createdAt).toLocaleString()}
-        </p>
-
-        <p className="text-xs text-slate-500 mt-2">
-          Hospital: {r.hospital?.hospitalName}
-        </p>
-      </div>
-    ))}
-  </div>
-)}
-            
-          </>
-        )}
-
-        {/* --------------------------------------------------- */}
-        {/* HOSPITAL DASHBOARD */}
-        {/* --------------------------------------------------- */}
-        {user.role === "hospital" && (
-          <>
-
-            <div className="flex gap-3 mt-3">
-  <button
-    onClick={() => setHTab("create")}
-    className={`px-3 py-2 rounded-lg border ${
-      hTab === "create"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    Create Request
-  </button>
-
-  <button
-    onClick={() => setHTab("my")}
-    className={`px-3 py-2 rounded-lg border ${
-      hTab === "my"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    My Requests
-  </button>
-
-  <button
-    onClick={() => setHTab("history")}
-    className={`px-3 py-2 rounded-lg border ${
-      hTab === "history"
-        ? "border-red-500 bg-red-500/20"
-        : "border-slate-700"
-    }`}
-  >
-    History
-  </button>
-</div>
-
-
-            {hTab === "create" && (
-              <form onSubmit={createRequest} className="card mt-6 space-y-4">
-
-                <div>
-                  <label className="text-slate-300 text-sm">
-                    Blood Group
-                  </label>
-                  <select
-                    value={newReq.bloodGroup}
-                    onChange={(e) =>
-                      setNewReq({ ...newReq, bloodGroup: e.target.value })
-                    }
-                    className="px-3 py-2 mt-1 bg-slate-900 border border-slate-700 rounded w-full"
-                  >
-                    <option value="">Select Blood Group</option>
-                    {["A+","A-","B+","B-","O+","O-","AB+","AB-"].map(bg => (
-                      <option key={bg} value={bg}>{bg}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <Input
-                  label="Units"
-                  type="number"
-                  value={newReq.units}
-                  onChange={(e) =>
-                    setNewReq({ ...newReq, units: e.target.value })
-                  }
-                />
-
-                <div className="flex flex-col text-sm">
-                  <label className="text-slate-300">Urgency</label>
-                  <select
-                    value={newReq.urgency}
-                    onChange={(e) =>
-                      setNewReq({ ...newReq, urgency: e.target.value })
-                    }
-                    className="px-3 py-2 bg-slate-900 border border-slate-700 rounded"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="emergency">Emergency</option>
-                  </select>
-                </div>
-
-                <textarea
-                  placeholder="Additional notes"
-                  className="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm"
-                  value={newReq.notes}
-                  onChange={(e) =>
-                    setNewReq({ ...newReq, notes: e.target.value })
-                  }
-                />
-
-                <Button>Create Request</Button>
-              </form>
-            )}
-
-            {hTab === "my" && (
-              <div className="grid gap-4 mt-6">
-                {myRequests.map((req) => (
-                  <RequestCard
-                    key={req._id}
-                    request={req}
-                    isHospital={true}
-                    onViewResponders={(r) =>
-                      router.push(`/requests/responders/${r._id}`)
-                    }
-                    onDelete={(id) => deleteRequest(id)}
-                    onChangeStatus={(id, status) =>
-                      changeStatus(id, status)
-                    }
-                  />
                 ))}
               </div>
-            )}
 
-            {hTab === "history" && (
-  <div className="grid gap-4 mt-6">
-    {history.length === 0 && (
-      <p className="text-slate-400">No requests created yet.</p>
-    )}
+              <div className="mt-6 bg-red-600/20 text-red-300 p-4 rounded-lg text-center">
+                ❤️ Thank you for being a life-saving donor!
+              </div>
+            </motion.div>
+          )}
 
-    {history.map((r) => (
-      <div
-        key={r._id}
-        className="p-4 bg-slate-900 border border-slate-800 rounded-xl"
-      >
-        <p className="font-semibold text-red-400">
-          {r.bloodGroup} • {r.city}
-        </p>
+          {/* DONOR HISTORY */}
+          {tab === "history" && (
+            <div className="grid gap-4 mt-6">
+              {history.length === 0 && (
+                <p className="text-slate-500 text-center">No history yet.</p>
+              )}
 
-        <p className="text-sm text-slate-400 mt-1">
-          {new Date(r.createdAt).toLocaleString()}
-        </p>
+              {history.map((item) => (
+                <motion.div
+                  key={item._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  className="p-5 bg-slate-900/60 backdrop-blur-md border border-slate-700 rounded-xl shadow-lg"
+                >
+                  <p className="font-semibold text-red-400 text-lg">
+                    {item.bloodGroup} Required
+                  </p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {item.city} • {new Date(item.createdAt).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Hospital: {item.hospital?.hospitalName}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
-        <p className="text-sm text-red-300 mt-2">
-          Responders: {r.responders?.length}
-        </p>
-      </div>
-    ))}
-  </div>
-)}
-          </>
-        )}
-      </div>
-    </main>
-  );
+      {/* --------------------------------------------------- */}
+      {/* HOSPITAL DASHBOARD */}
+      {/* --------------------------------------------------- */}
+      {user.role === "hospital" && (
+        <>
+          {/* TABS */}
+          <div className="flex gap-4 justify-center mb-8">
+            {[
+              ["create", "Create Request"],
+              ["my", "My Requests"],
+              ["history", "History"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setHTab(key)}
+                className={`
+                  px-5 py-2 rounded-xl text-sm font-semibold transition-all backdrop-blur-md
+                  ${hTab === key
+                    ? "bg-red-600/30 border border-red-500 shadow-lg shadow-red-800/40 text-red-300"
+                    : "bg-slate-900/40 border border-slate-700 hover:border-red-500 hover:bg-slate-800/50"}
+                `}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* CREATE REQUEST */}
+          {hTab === "create" && (
+            <motion.form
+              onSubmit={createRequest}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-6 rounded-2xl mb-10 bg-slate-900/60 backdrop-blur-md border border-slate-700 shadow-xl space-y-5"
+            >
+              <h2 className="text-2xl font-bold text-red-400">Create New Request</h2>
+
+              <div>
+                <label className="text-slate-300 text-sm">Blood Group</label>
+                <select
+                  value={newReq.bloodGroup}
+                  onChange={(e) => setNewReq({ ...newReq, bloodGroup: e.target.value })}
+                  className="px-3 py-2 mt-1 bg-slate-950 border border-slate-700 rounded w-full"
+                >
+                  <option value="">Select</option>
+                  {["A+","A-","B+","B-","O+","O-","AB+","AB-"].map(bg => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+              </div>
+
+              <Input
+                label="Units"
+                type="number"
+                value={newReq.units}
+                onChange={(e) => setNewReq({ ...newReq, units: e.target.value })}
+              />
+
+              <div>
+                <label className="text-slate-300 text-sm">Urgency</label>
+                <select
+                  value={newReq.urgency}
+                  onChange={(e) => setNewReq({ ...newReq, urgency: e.target.value })}
+                  className="px-3 py-2 bg-slate-950 border border-slate-700 rounded mt-1 w-full"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="emergency">Emergency</option>
+                </select>
+              </div>
+
+              <textarea
+                placeholder="Additional notes..."
+                className="w-full h-24 bg-slate-950 border border-slate-700 rounded p-2 text-sm"
+                value={newReq.notes}
+                onChange={(e) => setNewReq({ ...newReq, notes: e.target.value })}
+              />
+
+              <Button>Create Request</Button>
+            </motion.form>
+          )}
+
+          {/* MY REQUESTS */}
+          {hTab === "my" && (
+            <div className="grid gap-5 mt-6">
+              {myRequests.map((req) => (
+                <motion.div
+                  key={req._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                >
+                  <RequestCard
+                    request={req}
+                    isHospital
+                    onViewResponders={(r) => router.push(`/requests/responders/${r._id}`)}
+                    onDelete={() => askDelete(req._id)}
+                    onChangeStatus={(id, status) => changeStatus(id, status)}
+                  />
+                </motion.div>
+              ))}
+
+              <DeleteConfirmModal
+                open={!!deleteId}
+                onClose={() => setDeleteId(null)}
+                onConfirm={confirmDelete}
+              />
+            </div>
+          )}
+
+          {/* HOSPITAL HISTORY */}
+          {hTab === "history" && (
+            <div className="grid gap-4 mt-6">
+              {history.length === 0 && (
+                <p className="text-slate-400 text-center">No history yet.</p>
+              )}
+
+              {history.map((r) => (
+                <motion.div
+                  key={r._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  className="p-5 bg-slate-900/50 backdrop-blur-md border border-slate-700 rounded-xl shadow-lg"
+                >
+                  <p className="font-semibold text-red-400">{r.bloodGroup} • {r.city}</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {new Date(r.createdAt).toLocaleString()}
+                  </p>
+                  <p className="text-sm text-red-300 mt-2">
+                    Responders: {r.responders?.length}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  </main>
+);
+
 }

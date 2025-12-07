@@ -1,15 +1,24 @@
-// src/app/api/auth/register/route.js
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../../../../lib/db";
 import User from "../../../../models/User";
 import { signToken } from "../../../../lib/auth";
+import { verifyCaptcha } from "../../../../lib/verifyCaptcha";
 
 export async function POST(req) {
   try {
     await connectDB();
 
-    const { name, email, password } = await req.json();
+    const { name, email, password, captchaToken } = await req.json();
+
+    // ✅ Verify captcha
+    const isHuman = await verifyCaptcha(captchaToken);
+    if (!isHuman) {
+      return NextResponse.json(
+        { error: "Captcha failed. Try again." },
+        { status: 400 }
+      );
+    }
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -34,7 +43,6 @@ export async function POST(req) {
     });
 
     const token = signToken({ id: user._id, role: user.role });
-
 
     const safeUser = {
       id: user._id.toString(),
