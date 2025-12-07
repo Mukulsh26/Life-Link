@@ -167,45 +167,85 @@ export default function TestimonialsPage() {
       </section>
 
       {/* 🔥 CTA SECTION: JOIN LIFELINK */}
-      <section className="relative max-w-5xl mx-auto px-6 pb-24 mt-10 text-center">
-        <motion.h2
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-3xl md:text-4xl font-bold mb-4"
-        >
+      {/* 🔥 CTA SECTION: DYNAMIC JOIN / DASHBOARD */}
+<section className="relative max-w-5xl mx-auto px-6 pb-24 mt-10 text-center">
+  {/* Title */}
+  <motion.h2
+    initial={{ opacity: 0, y: 30 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5 }}
+    className="text-3xl md:text-4xl font-bold mb-4"
+  >
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "Thank You for Being a LifeLink Hero ❤️"
+            : "Your Hospital Helps Save Lives Every Day";
+        })()
+      : (
+        <>
           Become a Part of the <span className="text-red-500">LifeLink</span> Family
-        </motion.h2>
+        </>
+      )}
+  </motion.h2>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="text-slate-400 max-w-2xl mx-auto mb-8"
-        >
-          Join thousands of donors and volunteers saving lives every day.  
-          Your single contribution can become someone’s lifeline.
-        </motion.p>
+  {/* Description */}
+  <motion.p
+    initial={{ opacity: 0 }}
+    whileInView={{ opacity: 1 }}
+    transition={{ delay: 0.2 }}
+    className="text-slate-400 max-w-2xl mx-auto mb-8"
+  >
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "Check new matching requests and continue saving lives."
+            : "Manage requests, view responders, and help patients faster.";
+        })()
+      : "Join thousands of donors and hospitals saving lives every single day."}
+  </motion.p>
 
-        {/* Floating heart */}
-        <motion.div
-          animate={{ y: [-10, 10, -10] }}
-          transition={{ duration: 3, repeat: Infinity }}
-          className="flex justify-center mb-6"
-        >
-          <Heart className="text-red-500" size={45} />
-        </motion.div>
+  {/* Floating heart */}
+  <motion.div
+    animate={{ y: [-10, 10, -10] }}
+    transition={{ duration: 3, repeat: Infinity }}
+    className="flex justify-center mb-6"
+  >
+    <Heart className="text-red-500" size={45} />
+  </motion.div>
 
-        <motion.button
-          whileHover={{ scale: 1.08, boxShadow: "0 0 20px rgba(255,0,0,0.5)" }}
-          whileTap={{ scale: 0.96 }}
-          onClick={() => router.push("/signup")}
-          className="px-8 py-3 bg-red-600 rounded-xl text-white font-semibold
-                     shadow-lg shadow-red-900/40 hover:bg-red-700 transition"
-        >
-          Join as a Donor
-        </motion.button>
-      </section>
+  {/* Dynamic Button */}
+  <motion.button
+    whileHover={{ scale: 1.08, boxShadow: "0 0 20px rgba(255,0,0,0.5)" }}
+    whileTap={{ scale: 0.96 }}
+    onClick={() => {
+      const raw = typeof window !== "undefined" && localStorage.getItem("lifelink_user");
+      if (!raw) return router.push("/signup");
+
+      const user = JSON.parse(raw);
+
+      if (user.role === "donor")
+        return router.push("/dashboard?tab=requests");
+
+      if (user.role === "hospital")
+        return router.push("/dashboard?tab=my");
+    }}
+    className="px-8 py-3 bg-red-600 rounded-xl text-white font-semibold
+               shadow-lg shadow-red-900/40 hover:bg-red-700 transition"
+  >
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "Go to Dashboard"
+            : "Manage Requests";
+        })()
+      : "Join LifeLink Today"}
+  </motion.button>
+</section>
+
     </main>
   );
 }

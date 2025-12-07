@@ -113,26 +113,73 @@ export default function AboutPage() {
         </div>
 
         {/* Bottom Section CTA */}
-        <motion.div
-          className="text-center mt-20"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 0.5 }}
-        >
-          <p className="text-slate-400 text-lg mb-6">
-            Every drop counts. Every second matters.
-          </p>
+        {/* Bottom Section CTA - Dynamic Like Homepage */}
+<motion.div
+  className="relative text-center mt-20 py-12 px-4"
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ duration: 1, delay: 0.4 }}
+>
+  {/* Glowing halo */}
+  <div className="absolute inset-0 -z-10 bg-red-600/10 blur-3xl rounded-full" />
 
-          <button
-            onClick={() => (window.location.href = "/signup")}
-            className="px-8 py-3 rounded-full bg-gradient-to-r from-red-600 to-red-500
-                     hover:from-red-500 hover:to-red-600 text-white font-semibold 
-                     shadow-lg shadow-red-900/30 hover:shadow-red-700/40
-                     transition-all duration-300"
-          >
-            Join as a Donor
-          </button>
-        </motion.div>
+  {/* Heading based on login status */}
+  <h2 className="text-3xl font-extrabold mb-3">
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "You're a Life Saver ❤️"
+            : "Your Hospital Saves Lives Every Day";
+        })()
+      : "Become Part of LifeLink"}
+  </h2>
+
+  {/* Sub-text */}
+  <p className="text-slate-400 max-w-2xl mx-auto mb-8">
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "Continue helping patients by checking new matching requests."
+            : "Manage and track life-saving blood requests efficiently.";
+        })()
+      : "Join India’s fastest emergency blood network — every drop counts."}
+  </p>
+
+  {/* Dynamic Button */}
+  <motion.button
+    whileHover={{ scale: 1.1, boxShadow: "0 0 25px rgba(255,0,0,0.5)" }}
+    whileTap={{ scale: 0.9 }}
+    onClick={() => {
+      if (typeof window === "undefined") return;
+      const raw = localStorage.getItem("lifelink_user");
+
+      if (!raw) return (window.location.href = "/signup");
+
+      const user = JSON.parse(raw);
+      if (user.role === "donor")
+        return (window.location.href = "/dashboard?tab=requests");
+
+      if (user.role === "hospital")
+        return (window.location.href = "/dashboard?tab=my");
+    }}
+    className="px-10 py-3 rounded-full bg-gradient-to-r from-red-600 to-red-500 
+    hover:from-red-500 hover:to-red-600 text-white font-semibold 
+    shadow-lg shadow-red-900/30 hover:shadow-red-700/40 
+    transition-all duration-300"
+  >
+    {typeof window !== "undefined" && localStorage.getItem("lifelink_user")
+      ? (() => {
+          const user = JSON.parse(localStorage.getItem("lifelink_user"));
+          return user.role === "donor"
+            ? "Go to Dashboard"
+            : "Manage Requests";
+        })()
+      : "Join LifeLink Today"}
+  </motion.button>
+</motion.div>
+
       </section>
     </main>
   );
